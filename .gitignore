@@ -1,6 +1,1 @@
-__pycache__/
-*.py[cod]
-*$py.class
-.venv
-venv/
-.vscode/
+__pycache__/\n*.py[cod]\n*$py.class\n.venv\nvenv/\n.vscode/\n
