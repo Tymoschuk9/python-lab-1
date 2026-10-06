@@ -1,395 +1,317 @@
-import os
-import sys
-from pathlib import Path
+# ==============================================================================
+# FILE: src/bank_system/exceptions.py
+# ==============================================================================
+"""Модуль для визначення користувацьких винятків системи."""
 
-# ==========================================
-# 1. КОНСТАНТИ ВМІСТУ ФАЙЛІВ ПРОЄКТУ
-# ==========================================
-
-INIT_CONTENT = """\"\"\"Bank Account System package.\"\"\"
-
-__version__ = "0.1.0"
-"""
-
-MODELS_CONTENT = """from dataclasses import dataclass
-
-
-class InsufficientFundsError(Exception):
-    \"\"\"Виникає, коли на рахунку недостатньо коштів для списання.\"\"\"
+class BankSystemError(Exception):
+    """Базовий клас для всіх винятків у системі банківських рахунків."""
     pass
 
 
-class InvalidAmountError(Exception):
-    \"\"\"Виникає, коли вказано некоректну суму (від'ємну або нульову).\"\"\"
+class InsufficientFundsError(BankSystemError):
+    """Виникає, коли баланс рахунку недостатній для зняття або переказу коштів."""
     pass
+
+
+class NegativeAmountError(BankSystemError):
+    """Виникає при спробі виконати операцію з нульовою чи від'ємною сумою."""
+    pass
+
+
+class AccountNotFoundError(BankSystemError):
+    """Виникає, коли рахунок не знайдено в системі."""
+    pass
+
+
+# ==============================================================================
+# FILE: src/bank_system/models.py
+# ==============================================================================
+"""Модуль, що містить описи моделей даних (Data Models)."""
+
+from dataclasses import dataclass
 
 
 @dataclass
-class Account:
+class BankAccount:
+    """Клас для представлення банківського рахунку клієнта."""
     client_name: str
     account_number: str
     balance: float
 
     def __post_init__(self) -> None:
+        """Валідація початкових даних після ініціалізації."""
         if self.balance < 0:
             raise ValueError("Початковий баланс не може бути від'ємним.")
-"""
+        
+        if not self.client_name.strip():
+            raise ValueError("Ім'я клієнта не може бути порожнім.")
+            
+        if not self.account_number.strip():
+            raise ValueError("Номер рахунку не може бути порожнім.")
 
-SERVICES_CONTENT = """from bank_system.models import Account, InsufficientFundsError, InvalidAmountError
 
-# Конфігураційна константа
-MIN_TRANSACTION_AMOUNT = 0.01
+# ==============================================================================
+# FILE: src/bank_system/services.py
+# ==============================================================================
+"""Модуль для реалізації бізнес-логіки (Business Logic) системи рахунків."""
+
+from bank_system.models import BankAccount
+from bank_system.exceptions import InsufficientFundsError, NegativeAmountError
 
 
-def deposit(account: Account, amount: float) -> None:
-    \"\"\"Поповнює рахунок на вказану суму.\"\"\"
-    if amount < MIN_TRANSACTION_AMOUNT:
-        raise InvalidAmountError(
-            f"Сума поповнення повинна бути не меншою за {MIN_TRANSACTION_AMOUNT} UAH."
-        )
+def deposit(account: BankAccount, amount: float) -> None:
+    """Поповнення рахунку на задану суму."""
+    if amount <= 0:
+        raise NegativeAmountError("Сума поповнення повинна бути строго більшою за нуль.")
     account.balance += amount
 
 
-def withdraw(account: Account, amount: float) -> None:
-    \"\"\"Списує вказану суму з рахунку. Запобігає від'ємному балансу.\"\"\"
-    if amount < MIN_TRANSACTION_AMOUNT:
-        raise InvalidAmountError(
-            f"Сума списання повинна бути не меншою за {MIN_TRANSACTION_AMOUNT} UAH."
-        )
-    if account.balance - amount < 0:
+def withdraw(account: BankAccount, amount: float) -> None:
+    """Списання коштів з рахунку з контролем від'ємного балансу."""
+    if amount <= 0:
+        raise NegativeAmountError("Сума списання повинна бути строго більшою за нуль.")
+    if account.balance < amount:
         raise InsufficientFundsError(
             f"Недостатньо коштів на рахунку {account.account_number}. "
-            f"Доступно: {account.balance:.2f} UAH, запитано: {amount:.2f} UAH."
+            f"Баланс: {account.balance:.2f} UAH. Запитувано: {amount:.2f} UAH."
         )
     account.balance -= amount
 
 
-def find_account(accounts: list[Account], account_number: str) -> Account | None:
-    \"\"\"Шукає рахунок за його унікальним номером (без урахування регістру та пробілів).\"\"\"
-    cleaned_num = account_number.strip().lower()
+def find_account(accounts: list[BankAccount], account_number: str) -> BankAccount | None:
+    """Пошук рахунку за його унікальним номером (ігноруючи зайві пробіли)."""
+    cleaned_num = account_number.strip()
     for account in accounts:
-        if account.account_number.strip().lower() == cleaned_num:
+        if account.account_number.strip() == cleaned_num:
             return account
     return None
 
 
-def search_accounts(accounts: list[Account], query: str) -> list[Account]:
-    \"\"\"Шукає рахунки за іменем клієнта або номером рахунку (частковий збіг).\"\"\"
-    cleaned_query = query.strip().lower()
-    return [
-        acc for acc in accounts
-        if cleaned_query in acc.client_name.lower() or cleaned_query in acc.account_number.lower()
-    ]
+def calculate_total_funds(accounts: list[BankAccount]) -> float:
+    """Обчислення сумарного обсягу коштів на всіх банківських рахунках."""
+    return sum(account.balance for account in accounts)
 
 
-def calculate_total_funds(accounts: list[Account]) -> float:
-    \"\"\"Обчислює загальну суму коштів на всіх рахунках.\"\"\"
-    return sum(acc.balance for acc in accounts)
+def sort_accounts_by_balance(accounts: list[BankAccount], descending: bool = True) -> list[BankAccount]:
+    """Сортування рахунків за балансом (за замовчуванням у порядку спадання)."""
+    return sorted(accounts, key=lambda x: x.balance, reverse=descending)
 
 
-def sort_accounts_by_balance(accounts: list[Account], descending: bool = True) -> list[Account]:
-    \"\"\"Повертає відсортований список рахунків за балансом.\"\"\"
-    return sorted(accounts, key=lambda acc: acc.balance, reverse=descending)
-"""
+# ==============================================================================
+# FILE: src/bank_system/main.py
+# ==============================================================================
+"""Основний модуль, точка входу в програму. Консольний інтерфейс користувача."""
 
-MAIN_CONTENT = """import sys
-from bank_system.models import Account, InsufficientFundsError, InvalidAmountError
+import sys
+from bank_system.models import BankAccount
+from bank_system.exceptions import BankSystemError
 from bank_system.services import (
     deposit,
     withdraw,
     find_account,
-    search_accounts,
     calculate_total_funds,
     sort_accounts_by_balance,
 )
 
 
-def create_demo_accounts() -> list[Account]:
-    \"\"\"Створює демонстраційні банківські рахунки.\"\"\"
+def create_demo_accounts() -> list[BankAccount]:
+    """Створення демонстраційного набору даних."""
     return [
-        Account("Олександр Шевченко", "UA89300001", 15000.50),
-        Account("Марія Коваленко", "UA89300002", 4500.00),
-        Account("Дмитро Лисенко", "UA89300003", 750.25),
-        Account("Анна Петренко", "UA89300004", 98200.00),
+        BankAccount(client_name="Олександр Петренко", account_number="UA100200", balance=15000.50),
+        BankAccount(client_name="Марія Коваленко", account_number="UA300400", balance=2800.00),
+        BankAccount(client_name="Ігор Шевченко", account_number="UA500600", balance=450.75),
+        BankAccount(client_name="Олена Бойко", account_number="UA700800", balance=98500.00),
     ]
 
 
-def print_accounts(accounts: list[Account]) -> None:
-    \"\"\"Виводить таблицю рахунків.\"\"\"
+def print_accounts_table(accounts: list[BankAccount]) -> None:
+    """Форматоване виведення списку рахунків у вигляді таблиці."""
     if not accounts:
-        print("Список рахунків порожній.")
+        print("\n[!] Рахунки в системі відсутні.")
         return
-    print(f"\\n{'Клієнт':<25} | {'Номер рахунку':<15} | {'Баланс (UAH)':>15}")
-    print("-" * 62)
+
+    print("\n" + "=" * 65)
+    print(f"{'Номер рахунку':<15} | {'Ім’я клієнта':<25} | {'Баланс (UAH)':>18}")
+    print("-" * 65)
     for acc in accounts:
-        print(f"{acc.client_name:<25} | {acc.account_number:<15} | {acc.balance:>15.2f}")
+        print(f"{acc.account_number:<15} | {acc.client_name:<25} | {acc.balance:>18.2f}")
+    print("=" * 65)
 
 
 def get_float_input(prompt: str) -> float:
-    \"\"\"Валідує введення дійсного числа користувачем.\"\"\"
+    """Безпечне зчитування дійсного числа з консолі."""
     while True:
         try:
-            return float(input(prompt).strip())
+            return float(input(prompt))
         except ValueError:
-            print("Помилка: Введіть коректне числове значення.")
+            print("[Помилка] Будь ласка, введіть числове значення.")
 
 
-def print_menu() -> None:
-    print("\\n=== СИСТЕМА БАНКІВСЬКИХ РАХУНКІВ ===")
+def show_menu() -> None:
+    """Виведення списку команд інтерактивного меню."""
+    print("\n--- СИСТЕМА БАНКІВСЬКИХ РАХУНКІВ ---")
     print("1. Показати всі рахунки")
-    print("2. Знайти рахунок (ім'я / номер)")
+    print("2. Перевірити баланс окремого рахунку")
     print("3. Поповнити рахунок")
-    print("4. Списати кошти")
-    print("5. Переказати кошти іншому клієнту")
-    print("6. Показати загальний капітал банку")
-    print("7. Сортувати рахунки за балансом")
+    print("4. Списати кошти з рахунку")
+    print("5. Переказати кошти між рахунками")
+    print("6. Пошук рахунку за номером")
+    print("7. Обчислити загальний капітал банку")
     print("8. Створити новий рахунок")
-    print("9. Вийти")
+    print("9. Сортувати рахунки за балансом")
+    print("10. Вийти з програми")
 
 
 def main() -> None:
+    """Головна керуюча функція."""
     accounts = create_demo_accounts()
 
     while True:
-        print_menu()
-        choice = input("Оберіть опцію (1-9): ").strip()
+        show_menu()
+        choice = input("\nОберіть пункт меню (1-10): ").strip()
 
-        if choice == "1":
-            print("\\n--- Список усіх банківських рахунків ---")
-            print_accounts(accounts)
+        try:
+            if choice == "1":
+                print_accounts_table(accounts)
 
-        elif choice == "2":
-            print("\\n--- Пошук рахунку ---")
-            query = input("Введіть ім'я клієнта або номер рахунку: ")
-            results = search_accounts(accounts, query)
-            print(f"Знайдено рахунків: {len(results)}")
-            print_accounts(results)
+            elif choice == "2":
+                num = input("Введіть номер рахунку: ").strip()
+                acc = find_account(accounts, num)
+                if acc:
+                    print(f"\n[Успішно] Клієнт: {acc.client_name}")
+                    print(f"Поточний баланс рахунку {acc.account_number}: {acc.balance:.2f} UAH")
+                else:
+                    print("[!] Рахунок не знайдено.")
 
-        elif choice == "3":
-            print("\\n--- Поповнення рахунку ---")
-            acc_num = input("Введіть номер рахунку: ")
-            account = find_account(accounts, acc_num)
-            if account:
-                amount = get_float_input("Введіть суму поповнення (UAH): ")
-                try:
-                    deposit(account, amount)
-                    print(f"Успішно! Новий баланс рахунку {account.account_number}: {account.balance:.2f} UAH")
-                except InvalidAmountError as e:
-                    print(f"Помилка виконання операції: {e}")
-            else:
-                print("Помилка: Рахунок не знайдено.")
+            elif choice == "3":
+                num = input("Введіть номер рахунку: ").strip()
+                acc = find_account(accounts, num)
+                if acc:
+                    amount = get_float_input("Введіть суму поповнення (UAH): ")
+                    deposit(acc, amount)
+                    print(f"[Успішно] Рахунок поповнено! Поточний баланс: {acc.balance:.2f} UAH")
+                else:
+                    print("[!] Рахунок не знайдено.")
 
-        elif choice == "4":
-            print("\\n--- Списання коштів ---")
-            acc_num = input("Введіть номер рахунку: ")
-            account = find_account(accounts, acc_num)
-            if account:
-                amount = get_float_input("Введіть суму списання (UAH): ")
-                try:
-                    withdraw(account, amount)
-                    print(f"Успішно! Новий баланс рахунку {account.account_number}: {account.balance:.2f} UAH")
-                except (InvalidAmountError, InsufficientFundsError) as e:
-                    print(f"Помилка виконання транзакції: {e}")
-            else:
-                print("Помилка: Рахунок не знайдено.")
+            elif choice == "4":
+                num = input("Введіть номер рахунку: ").strip()
+                acc = find_account(accounts, num)
+                if acc:
+                    amount = get_float_input("Введіть суму списання (UAH): ")
+                    withdraw(acc, amount)
+                    print(f"[Успішно] Списання виконано! Поточний баланс: {acc.balance:.2f} UAH")
+                else:
+                    print("[!] Рахунок не знайдено.")
 
-        elif choice == "5":
-            print("\\n--- Міжбанківський переказ коштів ---")
-            sender_num = input("Введіть номер рахунку відправника: ")
-            sender = find_account(accounts, sender_num)
-            if not sender:
-                print("Помилка: Рахунок відправника не знайдено.")
-                continue
+            elif choice == "5":
+                sender_num = input("Введіть номер рахунку відправника: ").strip()
+                sender = find_account(accounts, sender_num)
+                if not sender:
+                    print("[!] Рахунок відправника не знайдено.")
+                    continue
 
-            receiver_num = input("Введіть номер рахунку одержувача: ")
-            receiver = find_account(accounts, receiver_num)
-            if not receiver:
-                print("Помилка: Рахунок одержувача не знайдено.")
-                continue
+                receiver_num = input("Введіть номер рахунку отримувача: ").strip()
+                receiver = find_account(accounts, receiver_num)
+                if not receiver:
+                    print("[!] Рахунок отримувача не знайдено.")
+                    continue
 
-            if sender == receiver:
-                print("Помилка: Рахунок відправника та одержувача не можуть бути однаковими.")
-                continue
+                if sender == receiver:
+                    print("[!] Помилка: рахунки відправника та отримувача збігаються.")
+                    continue
 
-            amount = get_float_input("Введіть суму переказу (UAH): ")
-            try:
+                amount = get_float_input("Введіть суму переказу (UAH): ")
                 withdraw(sender, amount)
                 deposit(receiver, amount)
-                print("Транзакція пройшла успішно!")
-                print(f"Баланс відправника ({sender.account_number}): {sender.balance:.2f} UAH")
-                print(f"Баланс одержувача ({receiver.account_number}): {receiver.balance:.2f} UAH")
-            except (InvalidAmountError, InsufficientFundsError) as e:
-                print(f"Помилка транзакції переказу: {e}")
+                print(f"[Успішно] Переказ {amount:.2f} UAH проведено.")
+                print(f"Новий баланс відправника ({sender.account_number}): {sender.balance:.2f} UAH")
 
-        elif choice == "6":
-            total = calculate_total_funds(accounts)
-            print(f"\\nЗагальна сума на всіх рахунках банку: {total:.2f} UAH")
+            elif choice == "6":
+                num = input("Введіть номер рахунку: ").strip()
+                acc = find_account(accounts, num)
+                if acc:
+                    print(f"\n[Знайдено рахунок]:")
+                    print(f"  Власник:        {acc.client_name}")
+                    print(f"  Номер рахунку:  {acc.account_number}")
+                    print(f"  Поточний баланс:{acc.balance:.2f} UAH")
+                else:
+                    print("[!] Рахунок не знайдено.")
 
-        elif choice == "7":
-            print("\\n--- Сортування рахунків ---")
-            order = input("Сортувати за спаданням балансу? (y/n, за замовчуванням 'y'): ").strip().lower()
-            descending = order != 'n'
-            sorted_list = sort_accounts_by_balance(accounts, descending=descending)
-            print_accounts(sorted_list)
+            elif choice == "7":
+                total_funds = calculate_total_funds(accounts)
+                print(f"\n[Капіталізація] Загальна сума на всіх рахунках: {total_funds:.2f} UAH")
 
-        elif choice == "8":
-            print("\\n--- Створення нового рахунку ---")
-            name = input("Введіть ПІБ клієнта: ").strip()
-            if not name:
-                print("Помилка: ПІБ не може бути порожнім.")
-                continue
-            acc_num = input("Введіть унікальний номер рахунку (наприклад, UA89300005): ").strip()
-            if not acc_num:
-                print("Помилка: Номер рахунку не може бути порожнім.")
-                continue
-            if find_account(accounts, acc_num):
-                print("Помилка: Рахунок з таким номером вже існує в системі.")
-                continue
-            balance = get_float_input("Введіть початковий баланс (UAH): ")
-            try:
-                new_acc = Account(client_name=name, account_number=acc_num, balance=balance)
+            elif choice == "8":
+                name = input("Введіть ім'я та прізвище клієнта: ").strip()
+                num = input("Введіть бажаний унікальний номер рахунку: ").strip()
+                
+                if find_account(accounts, num):
+                    print("[!] Помилка: Рахунок з таким номером вже зареєстровано в системі.")
+                    continue
+                
+                bal = get_float_input("Введіть початковий баланс: ")
+                new_acc = BankAccount(client_name=name, account_number=num, balance=bal)
                 accounts.append(new_acc)
-                print(f"Рахунок {acc_num} для клієнта '{name}' успішно зареєстровано!")
-            except ValueError as e:
-                print(f"Помилка створення рахунку: {e}")
+                print(f"[Успішно] Рахунок для '{name}' створено!")
 
-        elif choice == "9":
-            print("Вихід із системи. Дякуємо, що користуєтесь нашими послугами!")
-            break
-        else:
-            print("Помилка: Невідома опція меню. Спробуйте ще раз.")
+            elif choice == "9":
+                order = input("Сортувати за спаданням? (y/n): ").strip().lower()
+                descending = order != "n"
+                sorted_accs = sort_accounts_by_balance(accounts, descending=descending)
+                print_accounts_table(sorted_accs)
+
+            elif choice == "10":
+                print("\n[Програма] Роботу завершено. Дякуємо, що обрали наш банк!")
+                sys.exit(0)
+
+            else:
+                print("[!] Невідома опція меню. Будь ласка, введіть число від 1 до 10.")
+
+        except BankSystemError as e:
+            print(f"\n[Помилка банківської системи] {e}")
+        except ValueError as e:
+            print(f"\n[Помилка вхідних даних] {e}")
 
 
 if __name__ == "__main__":
     main()
-"""
-
-PYPROJECT_CONTENT = """[build-system]
-requires = ["setuptools>=70"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "bank-system"
-version = "0.1.0"
-description = "Laboratory work #1: Bank Account System in Python"
-requires-python = ">=3.11"
-
-[project.scripts]
-bank-system = "bank_system.main:main"
-"""
-
-GITIGNORE_CONTENT = """.venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-.idea/
-.vscode/
-dist/
-build/
-*.egg-info/
-.env
-"""
-
-README_CONTENT = """# Bank Account System
-
-Консольний застосунок для керування банківськими рахунками. Лабораторна робота №1 з дисципліни «Професійний Python» (Варіант №4).
-
-## Вимоги
-
-* Python 3.11+
-
-## Структура проєкту
-
-Створена за принципом `src-layout`:
-text
-bank_system/
-├── pyproject.toml
-├── README.md
-├── .gitignore
-├── src/
-│   └── bank_system/
-│       ├── __init__.py
-│       ├── main.py
-│       ├── models.py
-│       └── services.py
-└── tests/
 
 
-## Встановлення
+# ==============================================================================
+# FILE: src/bank_system/__init__.py
+# ==============================================================================
+"""Ініціалізаційний модуль пакету bank_system."""
 
-1. Створіть та активуйте віртуальне середовище:
-   bash
-   python -m venv .venv
-   # Windows:
-   .venv\\Scripts\\activate
-   # macOS/Linux:
-   source .venv/bin/activate
-   
-2. Встановіть локальний пакет у режимі редагування (editable mode):
-   bash
-   python -m pip install -e .
-   
-
-## Запуск програми
-
-Запуск як модуля Python:
-bash
-python -m bank_system.main
-
-Або через згенеровану консольну команду:
-bash
-bank-system
-
-"""
-
-# ==========================================
-# 2. АВТОМАТИЧНА ГЕНЕРАЦІЯ СТРУКТУРИ ПРОЄКТУ
-# ==========================================
+__version__ = "0.1.0"
 
 
-def generate_project_structure() -> None:
-    print("[*] Початок створення структури проєкту за принципом src-layout...")
-
-    # Створення директорій
-    base_dir = Path.cwd()
-    src_dir = base_dir / "src" / "bank_system"
-    tests_dir = base_dir / "tests"
-
-    src_dir.mkdir(parents=True, exist_ok=True)
-    tests_dir.mkdir(exist_ok=True)
-
-    # Визначення шляхів до файлів
-    files = {
-        base_dir / ".gitignore": GITIGNORE_CONTENT,
-        base_dir / "pyproject.toml": PYPROJECT_CONTENT,
-        base_dir / "README.md": README_CONTENT,
-        src_dir / "__init__.py": INIT_CONTENT,
-        src_dir / "models.py": MODELS_CONTENT,
-        src_dir / "services.py": SERVICES_CONTENT,
-        src_dir / "main.py": MAIN_CONTENT,
-    }
-
-    # Запис вмісту у відповідні файли
-    for file_path, content in files.items():
-        file_path.write_text(content, encoding="utf-8")
-        print(f"  [+] Створено файл: {file_path.relative_to(base_dir)}")
-
-    print("[*] Усі файли проєкту успішно згенеровано.")
+# ==============================================================================
+# FILE: pyproject.toml
+# ==============================================================================
+# [build-system]
+# requires = ["setuptools>=70"]
+# build-backend = "setuptools.build_meta"
+# 
+# [project]
+# name = "bank-system"
+# version = "0.1.0"
+# description = "Laboratory project implementing a modular Bank Account Management system"
+# requires-python = ">=3.11"
+# 
+# [project.scripts]
+# bank-system = "bank_system.main:main"
 
 
-if __name__ == "__main__":
-    # Створюємо файлову структуру проєкту на диску у поточній робочій теці
-    generate_project_structure()
-
-    # Додаємо шлях до згенерованих файлів у sys.path для можливості прямого імпорту
-    sys.path.insert(0, str(Path.cwd() / "src"))
-
-    print("\n" + "=" * 50)
-    print(" ПРОЄКТ ЗГЕНЕРОВАНО ТА ГОТОВИЙ ДО ЗАПУСКУ!")
-    print(" Запуск інтерактивної консолі програми...")
-    print("=" * 50 + "\n")
-
-    # Безпосередній запуск програми для демонстрації працездатності
-    import bank_system.main
-
-    bank_system.main.main()
+# ==============================================================================
+# FILE: .gitignore
+# ==============================================================================
+# .venv/
+# __pycache__/
+# *.pyc
+# .pytest_cache/
+# .idea/
+# .vscode/
+# dist/
+# build/
+# *.egg-info/
+# .env
