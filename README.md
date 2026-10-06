@@ -27,15 +27,65 @@
 
 ---
 # Мета
-Ознайомитися з принципами організації професійного Python-проєкту, опанувати структуру src-layout, роботу з віртуальним середовищем, Git та принципами модульного програмування.
+Ознайомлення з принципами організації професійного Python-проєкту, опанування src-layout, роботи з virtual environment, Git та інструментами керування пакетами (pyproject.toml).
 
-## Опис алгоритму (Варіант №3: Інтернет-магазин)
-Для реалізації системи обліку товарів було обрано об'єктно-орієнтований підхід з використанням `dataclass` для моделі `Product`. 
-1. **Структура**: Проєкт організовано за принципом `src-layout`, що відокремлює код від конфігураційних файлів.
-2. **Моделі**: Файл `models.py` містить структуру даних товару (назва, категорія, ціна, кількість) та обчислювальну властивість `total_value`.
-3. **Бізнес-логіка**: У `services.py` реалізовано функції для фільтрації товарів за категорією, пошуку найдорожчого товару та обчислення загальної вартості залишків на складі.
-4. **Точка входу**: `main.py` забезпечує взаємодію з користувачем через консольний вивід, використовуючи функції з модуля сервісів.
-5. **Версіонування**: Проєкт ініціалізовано в Git з послідовними комітами (структура, логіка, документація).
+## Опис алгоритму (Варіант №3)
+
+Проєкт «Інтернет-магазин» реалізовано з використанням модульної структури:
+1. **models.py**: Містить клас `Product` (dataclass) для опису структури товару та обчислювану властивість для вартості залишків.
+2. **services.py**: Містить бізнес-логіку: додавання товарів, фільтрація за категорією, пошук за назвою та визначення найдорожчого товару.
+3. **main.py**: Точка входу, що демонструє роботу сервісів та взаємодію з даними.
+
+### Реалізація основних компонентів:
+
+**src/shop_manager/models.py**
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Product:
+    name: str
+    category: str
+    price: float
+    quantity: int
+
+    @property
+    def total_value(self) -> float:
+        return self.price * self.quantity
+```
+
+**src/shop_manager/services.py**
+```python
+from shop_manager.models import Product
+
+def calculate_total_inventory_value(products: list[Product]) -> float:
+    return sum(p.total_value for p in products)
+
+def find_product(products: list[Product], name: str) -> Product | None:
+    return next((p for p in products if p.name.lower() == name.lower()), None)
+
+def filter_by_category(products: list[Product], category: str) -> list[Product]:
+    return [p for p in products if p.category.lower() == category.lower()]
+
+def get_most_expensive(products: list[Product]) -> Product | None:
+    return max(products, key=lambda p: p.price, default=None)
+```
+
+**Файл pyproject.toml**
+```toml
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shop-manager"
+version = "0.1.0"
+description = "Internet shop inventory management"
+requires-python = ">=3.11"
+
+[project.scripts]
+shop-manager = "shop_manager.main:main"
+```
 
 ## Висновок
-У ході лабораторної роботи було створено структурований Python-проєкт. Опановано інструменти для ізоляції залежностей (`venv`), управління метаданими (`pyproject.toml`) та контролю версій (`Git`). Використання модульної структури дозволяє легко масштабувати додаток, а `src-layout` сприяє кращій організації коду та спрощує процес тестування.
+У ході лабораторної роботи було створено структурований Python-проєкт з використанням `src-layout`. Програма розділена на модулі, що забезпечує чітке відокремлення даних від бізнес-логіки. Використання Git дозволило відстежити етапи розробки, а `pyproject.toml` та віртуальне середовище забезпечили ізоляцію залежностей та можливість інсталяції проєкту в режимі розробки. Отримані навички є базовими для подальшої професійної роботи над складнішими програмними продуктами.
