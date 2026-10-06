@@ -27,65 +27,15 @@
 
 ---
 # Мета
-Ознайомлення з принципами організації професійного Python-проєкту, опанування src-layout, роботи з virtual environment, Git та інструментами керування пакетами (pyproject.toml).
+Ознайомлення з принципами організації професійного Python-проєкту, структурою src-layout, використанням Git та інструментів автоматизації розробки.
 
 ## Опис алгоритму (Варіант №3)
-
-Проєкт «Інтернет-магазин» реалізовано з використанням модульної структури:
-1. **models.py**: Містить клас `Product` (dataclass) для опису структури товару та обчислювану властивість для вартості залишків.
-2. **services.py**: Містить бізнес-логіку: додавання товарів, фільтрація за категорією, пошук за назвою та визначення найдорожчого товару.
-3. **main.py**: Точка входу, що демонструє роботу сервісів та взаємодію з даними.
-
-### Реалізація основних компонентів:
-
-**src/shop_manager/models.py**
-```python
-from dataclasses import dataclass
-
-@dataclass
-class Product:
-    name: str
-    category: str
-    price: float
-    quantity: int
-
-    @property
-    def total_value(self) -> float:
-        return self.price * self.quantity
-```
-
-**src/shop_manager/services.py**
-```python
-from shop_manager.models import Product
-
-def calculate_total_inventory_value(products: list[Product]) -> float:
-    return sum(p.total_value for p in products)
-
-def find_product(products: list[Product], name: str) -> Product | None:
-    return next((p for p in products if p.name.lower() == name.lower()), None)
-
-def filter_by_category(products: list[Product], category: str) -> list[Product]:
-    return [p for p in products if p.category.lower() == category.lower()]
-
-def get_most_expensive(products: list[Product]) -> Product | None:
-    return max(products, key=lambda p: p.price, default=None)
-```
-
-**Файл pyproject.toml**
-```toml
-[build-system]
-requires = ["setuptools>=70"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "shop-manager"
-version = "0.1.0"
-description = "Internet shop inventory management"
-requires-python = ">=3.11"
-
-[project.scripts]
-shop-manager = "shop_manager.main:main"
-```
+Проєкт реалізує систему обліку товарів інтернет-магазину.
+1. **Моделі даних**: Використано `@dataclass` для опису `Product` (назва, категорія, ціна, кількість). Додано обчислювану властивість `total_value`.
+2. **Бізнес-логіка**: У модулі `services.py` реалізовано функції для фільтрації товарів за категорією, пошуку за назвою, визначення найдорожчого товару та розрахунку загальної вартості залишків на складі.
+3. **Точка входу**: `main.py` ініціалізує список об'єктів `Product`, викликає сервісні функції та виводить результати обробки у консоль.
+4. **Структура**: Дотримано `src-layout`, що ізолює програмний код у папці `src`. Налаштовано `pyproject.toml` для коректного встановлення пакету в режимі редагування (`editable mode`).
+5. **Контроль версій**: Проєкт ініціалізовано в Git з використанням `gitignore` для виключення системних файлів та середовища `.venv`. Виконано три логічні коміти: структурування, розробка логіки, фіналізація та документація.
 
 ## Висновок
-У ході лабораторної роботи було створено структурований Python-проєкт з використанням `src-layout`. Програма розділена на модулі, що забезпечує чітке відокремлення даних від бізнес-логіки. Використання Git дозволило відстежити етапи розробки, а `pyproject.toml` та віртуальне середовище забезпечили ізоляцію залежностей та можливість інсталяції проєкту в режимі розробки. Отримані навички є базовими для подальшої професійної роботи над складнішими програмними продуктами.
+У ході лабораторної роботи було створено структурований Python-проєкт. Отримано практичні навички роботи з віртуальними середовищами, пакетною структурою та інструментами контролю версій. Розділення коду на окремі модулі (models, services, main) забезпечує високу якість архітектури, легкість тестування та подальшого розширення функціоналу. Проєкт відповідає вимогам PEP 8 та стандартам сучасної розробки на Python.
